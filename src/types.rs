@@ -23,11 +23,8 @@
 
 #![allow(dead_code)]
 
-use ffi;
 use num::FromPrimitive;
 use std::os::raw;
-
-pub use self::sample_format_flags::SampleFormatFlags;
 
 /// The type used to refer to audio devices.
 ///
@@ -131,19 +128,19 @@ impl SampleFormat {
     ///
     /// Returns `None` if no matching format is found.
     pub fn from_flags(flags: SampleFormatFlags) -> Self {
-        if flags.contains(sample_format_flags::FLOAT_32) {
+        if flags.contains(SampleFormatFlags::FLOAT_32) {
             SampleFormat::F32
-        } else if flags.contains(sample_format_flags::INT_32) {
+        } else if flags.contains(SampleFormatFlags::INT_32) {
             SampleFormat::I32
-        } else if flags.contains(sample_format_flags::INT_24) {
+        } else if flags.contains(SampleFormatFlags::INT_24) {
             SampleFormat::I24
-        } else if flags.contains(sample_format_flags::INT_16) {
+        } else if flags.contains(SampleFormatFlags::INT_16) {
             SampleFormat::I16
-        } else if flags.contains(sample_format_flags::INT_8) {
+        } else if flags.contains(SampleFormatFlags::INT_8) {
             SampleFormat::I8
-        } else if flags.contains(sample_format_flags::UINT_8) {
+        } else if flags.contains(SampleFormatFlags::UINT_8) {
             SampleFormat::U8
-        } else if flags.contains(sample_format_flags::CUSTOM_FORMAT) {
+        } else if flags.contains(SampleFormatFlags::CUSTOM_FORMAT) {
             SampleFormat::Custom
         } else {
             SampleFormat::Unknown
@@ -153,13 +150,13 @@ impl SampleFormat {
     /// Converts `self` into the respective **SampleFormatFlags**.
     pub fn flags(self) -> SampleFormatFlags {
         match self {
-            SampleFormat::F32 => sample_format_flags::FLOAT_32,
-            SampleFormat::I32 => sample_format_flags::INT_32,
-            SampleFormat::I24 => sample_format_flags::INT_24,
-            SampleFormat::I16 => sample_format_flags::INT_16,
-            SampleFormat::I8 => sample_format_flags::INT_8,
-            SampleFormat::U8 => sample_format_flags::UINT_8,
-            SampleFormat::Custom => sample_format_flags::CUSTOM_FORMAT,
+            SampleFormat::F32 => SampleFormatFlags::FLOAT_32,
+            SampleFormat::I32 => SampleFormatFlags::INT_32,
+            SampleFormat::I24 => SampleFormatFlags::INT_24,
+            SampleFormat::I16 => SampleFormatFlags::INT_16,
+            SampleFormat::I8 => SampleFormatFlags::INT_8,
+            SampleFormat::U8 => SampleFormatFlags::UINT_8,
+            SampleFormat::Custom => SampleFormatFlags::CUSTOM_FORMAT,
             SampleFormat::Unknown => SampleFormatFlags::empty(),
         }
     }
@@ -178,69 +175,65 @@ impl SampleFormat {
     }
 }
 
-pub mod sample_format_flags {
-    //! A type safe wrapper around PortAudio's `PaSampleFormat` flags.
-    use ffi;
-    bitflags! {
-        /// A type used to specify one or more sample formats. Each value indicates a possible
-        /// format for sound data passed to and from the stream callback, Pa_ReadStream and
-        /// Pa_WriteStream.
-        ///
-        /// The standard formats paFloat32, paInt16, paInt32, paInt24, paInt8 and aUInt8 are
-        /// usually implemented by all implementations.
-        ///
-        /// The floating point representation (FLOAT_32) uses +1.0 and -1.0 as the maximum and
-        /// minimum respectively.
-        ///
-        /// UINT_8 is an unsigned 8 bit format where 128 is considered "ground"
-        ///
-        /// The paNonInterleaved flag indicates that audio data is passed as an array of pointers
-        /// to separate buffers, one buffer for each channel. Usually, when this flag is not used,
-        /// audio data is passed as a single buffer with all channels interleaved.
-        pub flags SampleFormatFlags: ::std::os::raw::c_ulong {
-            /// 32 bits float sample format
-            const FLOAT_32 = ffi::PA_FLOAT_32,
-            /// 32 bits int sample format
-            const INT_32 = ffi::PA_INT_32,
-            /// Packed 24 bits int sample format
-            const INT_24 = ffi::PA_INT_24,
-            /// 16 bits int sample format
-            const INT_16 = ffi::PA_INT_16,
-            /// 8 bits int sample format
-            const INT_8 = ffi::PA_INT_8,
-            /// 8 bits unsigned int sample format
-            const UINT_8 = ffi::PA_UINT_8,
-            /// Custom sample format
-            const CUSTOM_FORMAT = ffi::PA_CUSTOM_FORMAT,
-            /// Non interleaved sample format
-            const NON_INTERLEAVED = ffi::PA_NON_INTERLEAVED,
-        }
+bitflags! {
+    /// A type used to specify one or more sample formats. Each value indicates a possible
+    /// format for sound data passed to and from the stream callback, Pa_ReadStream and
+    /// Pa_WriteStream.
+    ///
+    /// The standard formats paFloat32, paInt16, paInt32, paInt24, paInt8 and aUInt8 are
+    /// usually implemented by all implementations.
+    ///
+    /// The floating point representation (FLOAT_32) uses +1.0 and -1.0 as the maximum and
+    /// minimum respectively.
+    ///
+    /// UINT_8 is an unsigned 8 bit format where 128 is considered "ground"
+    ///
+    /// The paNonInterleaved flag indicates that audio data is passed as an array of pointers
+    /// to separate buffers, one buffer for each channel. Usually, when this flag is not used,
+    /// audio data is passed as a single buffer with all channels interleaved.
+    pub struct SampleFormatFlags: ::std::os::raw::c_ulong {
+        /// 32 bits float sample format
+        const FLOAT_32 = ffi::PA_FLOAT_32;
+        /// 32 bits int sample format
+        const INT_32 = ffi::PA_INT_32;
+        /// Packed 24 bits int sample format
+        const INT_24 = ffi::PA_INT_24;
+        /// 16 bits int sample format
+        const INT_16 = ffi::PA_INT_16;
+        /// 8 bits int sample format
+        const INT_8 = ffi::PA_INT_8;
+        /// 8 bits unsigned int sample format
+        const UINT_8 = ffi::PA_UINT_8;
+        /// Custom sample format
+        const CUSTOM_FORMAT = ffi::PA_CUSTOM_FORMAT;
+        /// Non interleaved sample format
+        const NON_INTERLEAVED = ffi::PA_NON_INTERLEAVED;
     }
+}
 
-    impl From<ffi::SampleFormat> for SampleFormatFlags {
-        fn from(format: ffi::SampleFormat) -> Self {
-            SampleFormatFlags::from_bits(format).unwrap_or_else(|| SampleFormatFlags::empty())
-        }
+impl From<ffi::SampleFormat> for SampleFormatFlags {
+    fn from(format: ffi::SampleFormat) -> Self {
+        SampleFormatFlags::from_bits(format).unwrap_or_else(SampleFormatFlags::empty)
     }
+}
 
-    impl ::std::fmt::Display for SampleFormatFlags {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-            write!(
-                f,
-                "{:?}",
-                match self.bits() {
-                    ffi::PA_FLOAT_32 => "FLOAT_32",
-                    ffi::PA_INT_32 => "INT_32",
-                    //ffi::PA_INT_24 => "INT_24",
-                    ffi::PA_INT_16 => "INT_16",
-                    ffi::PA_INT_8 => "INT_8",
-                    ffi::PA_UINT_8 => "UINT_8",
-                    ffi::PA_CUSTOM_FORMAT => "CUSTOM_FORMAT",
-                    ffi::PA_NON_INTERLEAVED => "NON_INTERLEAVED",
-                    _ => "<Unknown SampleFormatFlags>",
-                }
-            )
-        }
+impl ::std::fmt::Display for SampleFormatFlags {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(
+            f,
+            "{:?}",
+            match self.bits() {
+                ffi::PA_FLOAT_32 => "FLOAT_32",
+                ffi::PA_INT_32 => "INT_32",
+                //ffi::PA_INT_24 => "INT_24",
+                ffi::PA_INT_16 => "INT_16",
+                ffi::PA_INT_8 => "INT_8",
+                ffi::PA_UINT_8 => "UINT_8",
+                ffi::PA_CUSTOM_FORMAT => "CUSTOM_FORMAT",
+                ffi::PA_NON_INTERLEAVED => "NON_INTERLEAVED",
+                _ => "<Unknown SampleFormatFlags>",
+            }
+        )
     }
 }
 
@@ -325,11 +318,11 @@ impl<'a> HostApiInfo<'a> {
         };
         Some(HostApiInfo {
             struct_version: c_info.structVersion,
-            host_type: host_type,
+            host_type,
             name: ffi::c_str_to_str(c_info.name).unwrap_or("<Failed to convert str from CStr>"),
-            device_count: device_count,
-            default_input_device: default_input_device,
-            default_output_device: default_output_device,
+            device_count,
+            default_input_device,
+            default_output_device,
         })
     }
 }

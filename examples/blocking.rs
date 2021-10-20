@@ -68,7 +68,7 @@ fn run() -> Result<(), pa::Error> {
     where
         F: Fn() -> Result<pa::StreamAvailable, pa::error::Error>,
     {
-        'waiting_for_stream: loop {
+        loop {
             match f() {
                 Ok(available) => match available {
                     pa::StreamAvailable::Frames(frames) => return frames as u32,
@@ -83,18 +83,18 @@ fn run() -> Result<(), pa::Error> {
                 ),
             }
         }
-    };
+    }
 
     // Now start the main read/write loop! In this example, we pass the input buffer directly to
     // the output buffer, so watch out for feedback.
-    'stream: loop {
+    loop {
         // How many frames are available on the input stream?
         let in_frames = wait_for_stream(|| stream.read_available(), "Read");
 
         // If there are frames available, let's take them and add them to our buffer.
         if in_frames > 0 {
             let input_samples = stream.read(in_frames)?;
-            buffer.extend(input_samples.into_iter());
+            buffer.extend(input_samples.iter());
             println!("Read {:?} frames from the input stream.", in_frames);
         }
 

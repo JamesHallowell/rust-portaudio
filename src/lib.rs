@@ -67,9 +67,8 @@ pub use ffi::{
     PA_CONTINUE as Continue,
 };
 pub use stream::{
-    callback_flags as stream_callback_flags, flags as stream_flags, Available as StreamAvailable,
-    Blocking, CallbackFlags as StreamCallbackFlags, CallbackTimeInfo as StreamCallbackTimeInfo,
-    Duplex, DuplexCallbackArgs as DuplexStreamCallbackArgs, DuplexSettings as DuplexStreamSettings,
+    Available as StreamAvailable, Blocking, CallbackTimeInfo as StreamCallbackTimeInfo, Duplex,
+    DuplexCallbackArgs as DuplexStreamCallbackArgs, DuplexSettings as DuplexStreamSettings,
     Flags as StreamFlags, Flow, Info as StreamInfo, Input,
     InputCallbackArgs as InputStreamCallbackArgs, InputSettings as InputStreamSettings,
     NonBlocking, Output, OutputCallbackArgs as OutputStreamCallbackArgs,
@@ -109,7 +108,7 @@ pub struct PortAudio {
 pub struct Life {
     /// This is solely used for checking whether or not the PortAudio API has already been
     /// terminated manually (via the `PortAudio::terminate` method) when `Drop::drop` is called.
-    is_terminated: std::sync::Mutex<bool>,
+    is_terminated: std::sync::atomic::AtomicBool,
 }
 
 impl PortAudio {
@@ -130,9 +129,9 @@ impl PortAudio {
             match error {
                 Error::NoError => {
                     let life = std::sync::Arc::new(Life {
-                        is_terminated: std::sync::Mutex::new(false),
+                        is_terminated: std::sync::atomic::AtomicBool::new(false),
                     });
-                    Ok(PortAudio { life: life })
+                    Ok(PortAudio { life })
                 }
                 err => Err(err),
             }
@@ -147,7 +146,9 @@ impl PortAudio {
     /// PortAudio termination errors. Otherwise, `Pa_Terminate` will be called and all necessary
     /// cleanup will occur automatically when this **PortAudio** instance is **Drop**ped.
     pub fn terminate(self) -> Result<(), Error> {
-        *self.life.is_terminated.lock().unwrap() = true;
+        self.life
+            .is_terminated
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         terminate()
     }
 
@@ -285,7 +286,7 @@ impl PortAudio {
     /// Return `Some(PaHostApiInfo)` describing a specific host API.
     ///
     /// Returns `None` if the `host_api` parameter is out of range or an error is encountered.
-    pub fn host_api_info<'a>(&'a self, host_api: HostApiIndex) -> Option<HostApiInfo<'a>> {
+    pub fn host_api_info(&self, host_api: HostApiIndex) -> Option<HostApiInfo> {
         let c_host_info = unsafe { ffi::Pa_GetHostApiInfo(host_api as HostApiIndex) };
         if c_host_info.is_null() {
             None
@@ -576,7 +577,7 @@ impl PortAudio {
     ///
     /// The function may sleep longer than requested so don't rely on this for accurate musical
     /// timing.
-    pub fn sleep(&self, m_sec: i32) -> () {
+    pub fn sleep(&self, m_sec: i32) {
         unsafe { ffi::Pa_Sleep(m_sec as raw::c_long) }
     }
 
@@ -592,7 +593,7 @@ impl PortAudio {
     /// Return a pointer to an immutable structure constraining information about the host error.
     /// The values in this structure will only be valid if a PortAudio function or method has
     /// previously returned the UnanticipatedHostError error code.
-    pub fn last_host_error_info<'a>(&'a self) -> HostErrorInfo<'a> {
+    pub fn last_host_error_info(&self) -> HostErrorInfo {
         let c_error = unsafe { ffi::Pa_GetLastHostErrorInfo() };
         HostErrorInfo::from_c_error_info(unsafe { *c_error })
     }
@@ -600,7 +601,7 @@ impl PortAudio {
 
 impl Drop for Life {
     fn drop(&mut self) {
-        if !*self.is_terminated.lock().unwrap() {
+        if !self.is_terminated.load(std::sync::atomic::Ordering::SeqCst) {
             terminate().ok();
         }
     }

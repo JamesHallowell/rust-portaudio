@@ -10,13 +10,8 @@ use std::os::raw;
 use std::{self, ptr};
 
 use super::error::Error;
-use super::types::{
-    sample_format_flags, DeviceIndex, DeviceKind, SampleFormat, SampleFormatFlags, Time,
-};
+use super::types::{DeviceIndex, DeviceKind, SampleFormat, SampleFormatFlags, Time};
 use super::Sample;
-
-pub use self::callback_flags::CallbackFlags;
-pub use self::flags::Flags;
 
 /// There are two **Mode**s with which a **Stream** can be set: [**Blocking**](./struct.Blocking)
 /// and [**NonBlocking**](./struct.NonBlocking).
@@ -85,7 +80,7 @@ pub trait Writer: Flow {
 }
 
 /// An alias for the boxed Callback function type.
-type CallbackFn = FnMut(
+type CallbackFn = dyn FnMut(
     *const raw::c_void,
     *mut raw::c_void,
     raw::c_ulong,
@@ -378,9 +373,9 @@ impl<S> Parameters<S> {
     ) -> Self {
         Parameters {
             device: device_kind,
-            channel_count: channel_count,
-            is_interleaved: is_interleaved,
-            suggested_latency: suggested_latency,
+            channel_count,
+            is_interleaved,
+            suggested_latency,
             sample_format: std::marker::PhantomData,
         }
     }
@@ -405,10 +400,10 @@ macro_rules! impl_half_duplex_settings {
                 flags: Flags,
             ) -> Self {
                 $name {
-                    params: params,
-                    sample_rate: sample_rate,
-                    frames_per_buffer: frames_per_buffer,
-                    flags: flags,
+                    params,
+                    sample_rate,
+                    frames_per_buffer,
+                    flags,
                 }
             }
         }
@@ -446,11 +441,11 @@ impl<I, O> DuplexSettings<I, O> {
         flags: Flags,
     ) -> Self {
         DuplexSettings {
-            in_params: in_params,
-            out_params: out_params,
-            sample_rate: sample_rate,
-            frames_per_buffer: frames_per_buffer,
-            flags: flags,
+            in_params,
+            out_params,
+            sample_rate,
+            frames_per_buffer,
+            flags,
         }
     }
 }
@@ -486,7 +481,7 @@ where
         in_channels: i32,
         _out_channels: i32,
     ) -> Self::CallbackArgs {
-        let flags = CallbackFlags::from_bits(flags).unwrap_or_else(|| CallbackFlags::empty());
+        let flags = CallbackFlags::from_bits(flags).unwrap_or_else(CallbackFlags::empty);
         let time = unsafe {
             InputCallbackTimeInfo {
                 current: (*time_info).currentTime,
@@ -502,10 +497,10 @@ where
             unsafe { std::slice::from_raw_parts(buffer_ptr, buffer_len) }
         };
         InputCallbackArgs {
-            buffer: buffer,
+            buffer,
             frames: frame_count as usize,
-            flags: flags,
-            time: time,
+            flags,
+            time,
         }
     }
 }
@@ -518,6 +513,11 @@ where
     type CallbackArgs = OutputCallbackArgs<'static, O>;
     type CallbackTimeInfo = OutputCallbackTimeInfo;
 
+    fn new_buffer(&self, frames_per_buffer: u32) -> Self::Buffer {
+        let channel_count = self.params.channel_count;
+        Buffer::new::<O>(frames_per_buffer, channel_count)
+    }
+
     fn params_both_directions(
         &self,
     ) -> (
@@ -525,11 +525,6 @@ where
         Option<ffi::PaStreamParameters>,
     ) {
         (None, Some(self.params.into()))
-    }
-
-    fn new_buffer(&self, frames_per_buffer: u32) -> Self::Buffer {
-        let channel_count = self.params.channel_count;
-        Buffer::new::<O>(frames_per_buffer, channel_count)
     }
 
     fn new_callback_args(
@@ -541,7 +536,7 @@ where
         _in_channels: i32,
         out_channels: i32,
     ) -> Self::CallbackArgs {
-        let flags = CallbackFlags::from_bits(flags).unwrap_or_else(|| CallbackFlags::empty());
+        let flags = CallbackFlags::from_bits(flags).unwrap_or_else(CallbackFlags::empty);
         let time = unsafe {
             OutputCallbackTimeInfo {
                 current: (*time_info).currentTime,
@@ -557,10 +552,10 @@ where
             unsafe { std::slice::from_raw_parts_mut(buffer_ptr, buffer_len) }
         };
         OutputCallbackArgs {
-            buffer: buffer,
+            buffer,
             frames: frame_count as usize,
-            flags: flags,
-            time: time,
+            flags,
+            time,
         }
     }
 }
@@ -574,6 +569,14 @@ where
     type CallbackArgs = DuplexCallbackArgs<'static, I, O>;
     type CallbackTimeInfo = DuplexCallbackTimeInfo;
 
+    fn new_buffer(&self, frames_per_buffer: u32) -> Self::Buffer {
+        let in_channel_count = self.in_params.channel_count;
+        let in_buffer = Buffer::new::<I>(frames_per_buffer, in_channel_count);
+        let out_channel_count = self.out_params.channel_count;
+        let out_buffer = Buffer::new::<O>(frames_per_buffer, out_channel_count);
+        (in_buffer, out_buffer)
+    }
+
     fn params_both_directions(
         &self,
     ) -> (
@@ -581,14 +584,6 @@ where
         Option<ffi::PaStreamParameters>,
     ) {
         (Some(self.in_params.into()), Some(self.out_params.into()))
-    }
-
-    fn new_buffer(&self, frames_per_buffer: u32) -> Self::Buffer {
-        let in_channel_count = self.in_params.channel_count;
-        let in_buffer = Buffer::new::<I>(frames_per_buffer, in_channel_count);
-        let out_channel_count = self.out_params.channel_count;
-        let out_buffer = Buffer::new::<O>(frames_per_buffer, out_channel_count);
-        (in_buffer, out_buffer)
     }
 
     fn new_callback_args(
@@ -600,7 +595,7 @@ where
         in_channels: i32,
         out_channels: i32,
     ) -> Self::CallbackArgs {
-        let flags = CallbackFlags::from_bits(flags).unwrap_or_else(|| CallbackFlags::empty());
+        let flags = CallbackFlags::from_bits(flags).unwrap_or_else(CallbackFlags::empty);
         let time = unsafe {
             DuplexCallbackTimeInfo {
                 current: (*time_info).currentTime,
@@ -622,11 +617,11 @@ where
             unsafe { std::slice::from_raw_parts_mut(buffer_ptr, buffer_len) }
         };
         DuplexCallbackArgs {
-            in_buffer: in_buffer,
-            out_buffer: out_buffer,
+            in_buffer,
+            out_buffer,
             frames: frame_count as usize,
-            flags: flags,
-            time: time,
+            flags,
+            time,
         }
     }
 }
@@ -690,51 +685,47 @@ pub struct Buffer {
     data: *mut libc::c_void,
 }
 
-pub mod flags {
-    //! A type safe wrapper around PortAudio's stream flags.
-    use ffi;
-    bitflags! {
-        /// Flags used to control the behaviour of a stream. They are passed as parameters to
-        /// Stream::open or Stream::open_default. Multiple flags may be used together.
-        ///
-        /// See the [bitflags repo](https://github.com/rust-lang/bitflags/blob/master/src/lib.rs)
-        /// for examples of composing flags together.
-        pub flags Flags: ::std::os::raw::c_ulong {
-            /// No flags.
-            const NO_FLAG =                                       ffi::PA_NO_FLAG,
-            /// Disable default clipping of out of range samples.
-            const CLIP_OFF =                                      ffi::PA_CLIP_OFF,
-            /// Disable default dithering.
-            const DITHER_OFF =                                    ffi::PA_DITHER_OFF,
-            /// Flag requests that where possible a full duplex stream will not discard overflowed
-            /// input samples without calling the stream callback.
-            const NEVER_DROP_INPUT =                              ffi::PA_NEVER_DROP_INPUT,
-            /// Call the stream callback to fill initial output buffers, rather than the default
-            /// behavior of priming the buffers with zeros (silence)
-            const PA_PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK = ffi::PA_PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK,
-            /// A mask specifying the platform specific bits.
-            const PA_PLATFORM_SPECIFIC_FLAGS =                    ffi::PA_PLATFORM_SPECIFIC_FLAGS,
-        }
+bitflags! {
+    /// Flags used to control the behaviour of a stream. They are passed as parameters to
+    /// Stream::open or Stream::open_default. Multiple flags may be used together.
+    ///
+    /// See the [bitflags repo](https://github.com/rust-lang/bitflags/blob/master/src/lib.rs)
+    /// for examples of composing flags together.
+    pub struct Flags: std::os::raw::c_ulong {
+        /// No flags.
+        const NO_FLAG =                                       ffi::PA_NO_FLAG;
+        /// Disable default clipping of out of range samples.
+        const CLIP_OFF =                                      ffi::PA_CLIP_OFF;
+        /// Disable default dithering.
+        const DITHER_OFF =                                    ffi::PA_DITHER_OFF;
+        /// Flag requests that where possible a full duplex stream will not discard overflowed
+        /// input samples without calling the stream callback.
+        const NEVER_DROP_INPUT =                              ffi::PA_NEVER_DROP_INPUT;
+        /// Call the stream callback to fill initial output buffers, rather than the default
+        /// behavior of priming the buffers with zeros (silence)
+        const PA_PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK = ffi::PA_PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK;
+        /// A mask specifying the platform specific bits.
+        const PA_PLATFORM_SPECIFIC_FLAGS =                    ffi::PA_PLATFORM_SPECIFIC_FLAGS;
     }
+}
 
-    impl ::std::fmt::Display for Flags {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-            write!(
-                f,
-                "{:?}",
-                match self.bits() {
-                    ffi::PA_NO_FLAG => "NO_FLAG",
-                    ffi::PA_CLIP_OFF => "CLIP_OFF",
-                    ffi::PA_DITHER_OFF => "DITHER_OFF",
-                    ffi::PA_NEVER_DROP_INPUT => "NEVER_DROP_INPUT",
-                    ffi::PA_PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK => {
-                        "PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK"
-                    }
-                    ffi::PA_PLATFORM_SPECIFIC_FLAGS => "PLATFORM_SPECIFIC_FLAGS",
-                    _ => "<Unknown StreamFlags>",
+impl std::fmt::Display for Flags {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?}",
+            match self.bits() {
+                ffi::PA_NO_FLAG => "NO_FLAG",
+                ffi::PA_CLIP_OFF => "CLIP_OFF",
+                ffi::PA_DITHER_OFF => "DITHER_OFF",
+                ffi::PA_NEVER_DROP_INPUT => "NEVER_DROP_INPUT",
+                ffi::PA_PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK => {
+                    "PRIME_OUTPUT_BUFFERS_USING_STREAM_CALLBACK"
                 }
-            )
-        }
+                ffi::PA_PLATFORM_SPECIFIC_FLAGS => "PLATFORM_SPECIFIC_FLAGS",
+                _ => "<Unknown StreamFlags>",
+            }
+        )
     }
 }
 
@@ -750,51 +741,47 @@ pub enum Available {
     OutputUnderflowed,
 }
 
-pub mod callback_flags {
-    //! A type safe wrapper around PortAudio's stream callback flags.
-    use ffi;
-    bitflags! {
-        /// Flag bit constants for the status flags passed to the stream's callback function.
-        pub flags CallbackFlags:  ::std::os::raw::c_ulong {
-            /// No flags.
-            const NO_FLAG          = ffi::PA_NO_FLAG,
-            /// In a stream opened with paFramesPerBufferUnspecified, indicates that input data is
-            /// all silence (zeros) because no real data is available. In a stream opened without
-            /// `FramesPerBufferUnspecified`, it indicates that one or more zero samples have been
-            /// inserted into the input buffer to compensate for an input underflow.
-            const INPUT_UNDERFLOW  = ffi::INPUT_UNDERFLOW,
-            /// In a stream opened with paFramesPerBufferUnspecified, indicates that data prior to
-            /// the first sample of the input buffer was discarded due to an overflow, possibly
-            /// because the stream callback is using too much CPU time. Otherwise indicates that
-            /// data prior to one or more samples in the input buffer was discarded.
-            const INPUT_OVERFLOW   = ffi::INPUT_OVERFLOW,
-            /// Indicates that output data (or a gap) was inserted, possibly because the stream
-            /// callback is using too much CPU time.
-            const OUTPUT_UNDERFLOW = ffi::OUTPUT_UNDERFLOW,
-            /// Indicates that output data will be discarded because no room is available.
-            const OUTPUT_OVERFLOW  = ffi::OUTPUT_OVERFLOW,
-            /// Some of all of the output data will be used to prime the stream, input data may be
-            /// zero.
-            const PRIMING_OUTPUT   = ffi::PRIMING_OUTPUT,
-        }
+bitflags! {
+    /// Flag bit constants for the status flags passed to the stream's callback function.
+    pub struct CallbackFlags:  std::os::raw::c_ulong {
+        /// No flags.
+        const NO_FLAG          = ffi::PA_NO_FLAG;
+        /// In a stream opened with paFramesPerBufferUnspecified, indicates that input data is
+        /// all silence (zeros) because no real data is available. In a stream opened without
+        /// `FramesPerBufferUnspecified`, it indicates that one or more zero samples have been
+        /// inserted into the input buffer to compensate for an input underflow.
+        const INPUT_UNDERFLOW  = ffi::INPUT_UNDERFLOW;
+        /// In a stream opened with paFramesPerBufferUnspecified, indicates that data prior to
+        /// the first sample of the input buffer was discarded due to an overflow, possibly
+        /// because the stream callback is using too much CPU time. Otherwise indicates that
+        /// data prior to one or more samples in the input buffer was discarded.
+        const INPUT_OVERFLOW   = ffi::INPUT_OVERFLOW;
+        /// Indicates that output data (or a gap) was inserted, possibly because the stream
+        /// callback is using too much CPU time.
+        const OUTPUT_UNDERFLOW = ffi::OUTPUT_UNDERFLOW;
+        /// Indicates that output data will be discarded because no room is available.
+        const OUTPUT_OVERFLOW  = ffi::OUTPUT_OVERFLOW;
+        /// Some of all of the output data will be used to prime the stream, input data may be
+        /// zero.
+        const PRIMING_OUTPUT   = ffi::PRIMING_OUTPUT;
     }
+}
 
-    impl ::std::fmt::Display for CallbackFlags {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-            write!(
-                f,
-                "{:?}",
-                match self.bits() {
-                    ffi::PA_NO_FLAG => "NO_FLAG",
-                    ffi::INPUT_UNDERFLOW => "INPUT_UNDERFLOW",
-                    ffi::INPUT_OVERFLOW => "INPUT_OVERFLOW",
-                    ffi::OUTPUT_UNDERFLOW => "OUTPUT_UNDERFLOW",
-                    ffi::OUTPUT_OVERFLOW => "OUTPUT_OVERFLOW",
-                    ffi::PRIMING_OUTPUT => "PRIMING_INPUT",
-                    _ => "<Unknown StreamCallbackFlags>",
-                }
-            )
-        }
+impl std::fmt::Display for CallbackFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?}",
+            match self.bits() {
+                ffi::PA_NO_FLAG => "NO_FLAG",
+                ffi::INPUT_UNDERFLOW => "INPUT_UNDERFLOW",
+                ffi::INPUT_OVERFLOW => "INPUT_OVERFLOW",
+                ffi::OUTPUT_UNDERFLOW => "OUTPUT_UNDERFLOW",
+                ffi::OUTPUT_OVERFLOW => "OUTPUT_OVERFLOW",
+                ffi::PRIMING_OUTPUT => "PRIMING_INPUT",
+                _ => "<Unknown StreamCallbackFlags>",
+            }
+        )
     }
 }
 
@@ -850,7 +837,7 @@ impl<S: Sample> Parameters<S> {
     /// `UseHostApiSpecificDeviceSpecification` flag.
     pub fn from_c_params(c_params: ffi::PaStreamParameters) -> Option<Self> {
         let sample_format_flags: SampleFormatFlags = c_params.sampleFormat.into();
-        let is_interleaved = !sample_format_flags.contains(sample_format_flags::NON_INTERLEAVED);
+        let is_interleaved = !sample_format_flags.contains(SampleFormatFlags::NON_INTERLEAVED);
         let c_sample_format = SampleFormat::from_flags(c_params.sampleFormat.into());
         if S::sample_format() != c_sample_format {
             return None;
@@ -861,10 +848,10 @@ impl<S: Sample> Parameters<S> {
             _ => return None,
         };
         Some(Parameters {
-            device: device,
+            device,
             channel_count: c_params.channelCount,
             suggested_latency: c_params.suggestedLatency,
-            is_interleaved: is_interleaved,
+            is_interleaved,
             sample_format: std::marker::PhantomData,
         })
     }
@@ -883,7 +870,7 @@ impl<S: Sample> From<Parameters<S>> for ffi::PaStreamParameters {
         let sample_format = S::sample_format();
         let mut sample_format_flags = sample_format.flags();
         if !is_interleaved {
-            sample_format_flags.insert(sample_format_flags::NON_INTERLEAVED);
+            sample_format_flags.insert(SampleFormatFlags::NON_INTERLEAVED);
         }
         ffi::PaStreamParameters {
             device: device.into(),
@@ -904,7 +891,7 @@ impl<I> Settings for InputSettings<I> {
             frames_per_buffer,
             flags,
         } = self;
-        let flow = Input { params: params };
+        let flow = Input { params };
         (flow, sample_rate, frames_per_buffer, flags)
     }
 }
@@ -918,7 +905,7 @@ impl<O> Settings for OutputSettings<O> {
             frames_per_buffer,
             flags,
         } = self;
-        let flow = Output { params: params };
+        let flow = Output { params };
         (flow, sample_rate, frames_per_buffer, flags)
     }
 }
@@ -934,8 +921,8 @@ impl<I, O> Settings for DuplexSettings<I, O> {
             flags,
         } = self;
         let flow = Duplex {
-            in_params: in_params,
-            out_params: out_params,
+            in_params,
+            out_params,
         };
         (flow, sample_rate, frames_per_buffer, flags)
     }
@@ -954,7 +941,7 @@ impl Buffer {
     }
 
     /// Convert the **Buffer**'s data field into a slice with the given format.
-    unsafe fn slice<'a, S>(&'a self, frames: u32, channels: i32) -> &'a [S] {
+    unsafe fn slice<S>(&self, frames: u32, channels: i32) -> &[S] {
         let len = (frames * channels as u32) as usize;
         // TODO: At the moment, we assume this buffer is interleaved. We need to check whether
         // or not buffer is interleaved here. This should probably an extra type parameter
@@ -963,7 +950,7 @@ impl Buffer {
     }
 
     /// Convert the **Buffer**'s data field into a mutable slice with the given format.
-    unsafe fn slice_mut<'a, S>(&'a mut self, frames: u32, channels: i32) -> &'a mut [S] {
+    unsafe fn slice_mut<S>(&mut self, frames: u32, channels: i32) -> &mut [S] {
         let len = (frames * channels as u32) as usize;
         // TODO: At the moment, we assume this buffer is interleaved. We need to check whether
         // or not buffer is interleaved here. This should probably an extra type parameter
@@ -987,8 +974,8 @@ fn open_blocking_stream(
 ) -> Result<*mut raw::c_void, Error> {
     // The pointer to which PortAudio will attach the stream.
     let mut c_stream_ptr: *mut raw::c_void = ptr::null_mut();
-    let in_c_params = in_params.map(|p| p.into());
-    let out_c_params = out_params.map(|p| p.into());
+    let in_c_params = in_params;
+    let out_c_params = out_params;
     let in_c_params_ptr = in_c_params
         .as_ref()
         .map(|p| p as *const _)
@@ -1029,8 +1016,8 @@ fn open_non_blocking_stream(
 ) -> Result<*mut raw::c_void, Error> {
     // The pointer to which PortAudio will attach the stream.
     let mut c_stream_ptr: *mut raw::c_void = ptr::null_mut();
-    let in_c_params = in_params.map(|p| p.into());
-    let out_c_params = out_params.map(|p| p.into());
+    let in_c_params = in_params;
+    let out_c_params = out_params;
     let in_c_params_ptr = in_c_params
         .as_ref()
         .map(|p| p as *const _)
@@ -1080,8 +1067,8 @@ impl<M, F> Stream<M, F> {
     fn new_unopened(mode: M, flow: F, life: std::sync::Arc<super::Life>) -> Self {
         Stream {
             pa_stream: ptr::null_mut(),
-            mode: mode,
-            flow: flow,
+            mode,
+            flow,
             port_audio_life: life,
         }
     }
@@ -1220,7 +1207,7 @@ where
     {
         let (flow, sample_rate, frames_per_buffer, flags) = settings.into_flow_and_settings();
         let buffer = flow.new_buffer(frames_per_buffer);
-        let blocking = Blocking { buffer: buffer };
+        let blocking = Blocking { buffer };
         let (in_params, out_params) = flow.params_both_directions();
         let mut stream = Stream::new_unopened(blocking, flow, life);
         open_blocking_stream(in_params, out_params, sample_rate, frames_per_buffer, flags).map(
@@ -1271,7 +1258,7 @@ where
     /// Returns an `Error` if some error occurred.
     ///
     /// TODO: Research and document exactly what errors can occur.
-    pub fn read<'b>(&'b self, frames: u32) -> Result<&'b [F::Sample], Error> {
+    pub fn read(&self, frames: u32) -> Result<&[F::Sample], Error> {
         let buffer = F::readable_buffer(&self.mode);
         let err = unsafe {
             ffi::Pa_ReadStream(
