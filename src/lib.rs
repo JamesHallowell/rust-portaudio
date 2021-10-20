@@ -85,7 +85,6 @@ use std::ptr;
 #[macro_use]
 mod enum_primitive;
 pub mod error;
-pub mod ext;
 pub mod stream;
 mod types;
 
