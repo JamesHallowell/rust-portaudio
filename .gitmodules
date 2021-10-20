@@ -1,0 +1,3 @@
+[submodule "rust-portaudio-sys/portaudio"]
+	path = rust-portaudio-sys/portaudio
+	url = git@github.com:PortAudio/portaudio.git
