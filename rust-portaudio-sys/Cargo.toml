@@ -13,7 +13,6 @@ links = "portaudio"
 
 [lib]
 name = "portaudio_sys"
-crate-type = ["rlib"]
 
 [build-dependencies]
 cmake = "0.1.46"

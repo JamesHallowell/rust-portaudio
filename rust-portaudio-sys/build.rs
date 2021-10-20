@@ -22,6 +22,7 @@
 fn main() {
     let dst = cmake::Config::new("portaudio")
         .define("BUILD_SHARED_LIBS", "OFF")
+        .define("PA_USE_ASIO", "ON")
         .build();
 
     println!("cargo:rustc-link-search={}/lib", dst.display());
@@ -31,5 +32,8 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
         println!("cargo:rustc-link-lib=framework=CoreAudio");
         println!("cargo:rustc-link-lib=framework=AudioToolbox");
+    }
+    if cfg!(target_os = "windows") {
+        println!("cargo:rustc-link-lib=dylib=user32")
     }
 }
