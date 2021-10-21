@@ -16,3 +16,4 @@ num = "0.4.0"
 num-traits = "0.2.14"
 num-derive = "0.3.3"
 portaudio_sys = { path = "./rust-portaudio-sys", version = "0.1.0" }
+thiserror = "1.0.30"
