@@ -237,10 +237,9 @@ impl ::std::fmt::Display for SampleFormatFlags {
     }
 }
 
-enum_from_primitive! {
 /// Unchanging unique identifiers for each supported host API
 #[repr(u32)]
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, num_derive::FromPrimitive)]
 pub enum HostApiTypeId {
     /// In development host
     InDevelopment = ffi::PaHostApiTypeId_paInDevelopment,
@@ -270,7 +269,6 @@ pub enum HostApiTypeId {
     WASAPI = ffi::PaHostApiTypeId_paWASAPI,
     /// Audio Science HPI
     AudioScienceHPI = ffi::PaHostApiTypeId_paAudioScienceHPI,
-}
 }
 
 /// A structure containing information about a particular host API.
